@@ -5,6 +5,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.neural_network import MLPRegressor
 from xgboost import XGBRegressor
 from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.preprocessing import StandardScaler
 from config import dataset_dir, null_handler_option
 from null_handler import null_handler
 import numpy as np
@@ -28,6 +29,11 @@ else:
 # Train-test split
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
 
+# Scale the data for Neural Network
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
 # Define models
 models = {
     'Random Forest': RandomForestRegressor(random_state=42),
@@ -39,7 +45,12 @@ models = {
 # Hyperparameters for tuning (example values)
 param_grid = {
     'Random Forest': {'n_estimators': [100, 200], 'max_depth': [10, 20, None]},
-    'Neural Network': {'hidden_layer_sizes': [(50, 50), (100,)], 'activation': ['relu', 'tanh']},
+    'Neural Network': {
+        'hidden_layer_sizes': [(50,), (100,), (100, 50)],
+        'activation': ['relu', 'tanh'],
+        'alpha': [0.0001, 0.001, 0.01],  # Regularization parameter
+        'learning_rate_init': [0.001, 0.01],
+    },
     'XGBoost': {'n_estimators': [100, 200], 'learning_rate': [0.01, 0.1]},
 }
 
@@ -50,17 +61,23 @@ feature_importance = {}
 for name, model in models.items():
     print(f"Training {name}...")
 
+    # Use scaled data only for Neural Network
+    if name == 'Neural Network':
+        X_train_input, X_test_input = X_train_scaled, X_test_scaled
+    else:
+        X_train_input, X_test_input = X_train, X_test
+
     # Use GridSearchCV if needed
     if name in param_grid:
         grid_search = GridSearchCV(model, param_grid[name], cv=3, scoring='r2', n_jobs=-1)
-        grid_search.fit(X_train, y_train)
+        grid_search.fit(X_train_input, y_train)
         best_model = grid_search.best_estimator_
     else:
         best_model = model
-        best_model.fit(X_train, y_train)
+        best_model.fit(X_train_input, y_train)
 
     # Predict and evaluate
-    y_pred = best_model.predict(X_test)
+    y_pred = best_model.predict(X_test_input)
     mse = mean_squared_error(y_test, y_pred)
     r2 = r2_score(y_test, y_pred)
     results[name] = {'MSE': mse, 'R2 Score': r2,

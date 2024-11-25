@@ -3,6 +3,8 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 from xgboost import XGBRegressor
 from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.neural_network import MLPRegressor
+from sklearn.preprocessing import StandardScaler
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from config import dataset_dir, null_handler_option
@@ -28,13 +30,27 @@ else:
 # Train-test split
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
 
+# Define scalers for Neural Network, we've seen poor performance on the data as is, so were normalizing for the NN alone
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
 # Define the base models
 rf_model = RandomForestRegressor(random_state=42, n_estimators=200, max_depth=20)
 xgb_model = XGBRegressor(random_state=42, n_estimators=200, learning_rate=0.1, objective='reg:squarederror')
+nn_model = MLPRegressor(random_state=42, max_iter=500, hidden_layer_sizes=(100,), activation='relu')
 
 # Train the base models separately
 rf_model.fit(X_train, y_train)
 xgb_model.fit(X_train, y_train)
+nn_model.fit(X_train_scaled, y_train)  # Use scaled data for Neural Network
+
+# Evaluate the Neural Network
+y_pred_nn = nn_model.predict(X_test_scaled)  # Use scaled data for testing
+mse_nn = mean_squared_error(y_test, y_pred_nn)
+r2_nn = r2_score(y_test, y_pred_nn)
+
+print(f"\nNeural Network - MSE: {mse_nn}, R2 Score: {r2_nn}")
 
 # Define the stacking ensemble model
 stacked_model = StackingRegressor(
@@ -43,7 +59,7 @@ stacked_model = StackingRegressor(
     cv=3
 )
 
-# Train the stacked model
+# Train the stacked model (uses original, unscaled data)
 stacked_model.fit(X_train, y_train)
 
 # Evaluate the stacked model
